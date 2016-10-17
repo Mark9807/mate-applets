@@ -3,7 +3,7 @@ import locale
 from os.path import join
 
 import gi
-gi.require_version("Gtk", 3.0)
+gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 from gi.repository import GObject
 import mate_invest
