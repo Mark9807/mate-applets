@@ -1,4 +1,22 @@
 #!/usr/bin/env python
+#NB Do not import anything applet specific until we've decided where to import from
+import getopt, sys
+from os.path import *
+import os
+
+# Allow to use uninstalled
+def _check(path):
+	return exists(path) and isdir(path) and isfile(path+"/Makefile.am")
+
+realfile = os.path.realpath(__file__) #in case of symlink
+name = join(dirname(realfile), '..')
+if _check(name):
+	print 'Running uninstalled invest, modifying PYTHONPATH'
+	sys.path.insert(0, abspath(name))
+else:
+	sys.path.insert(0, abspath("@PYTHONDIR@"))
+
+# Now the path is set, import our applet. Must be done after setting python path
 import mate_invest.defs
 
 import gi
@@ -7,21 +25,6 @@ from gi.repository import Gtk
 from gi.repository import GObject
 from gi.repository import MatePanelApplet
 
-import getopt, sys
-from os.path import *
-
-# Allow to use uninstalled
-def _check(path):
-	return exists(path) and isdir(path) and isfile(path+"/Makefile.am")
-
-name = join(dirname(__file__), '..')
-if _check(name):
-	print 'Running uninstalled invest, modifying PYTHONPATH'
-	sys.path.insert(0, abspath(name))
-else:
-	sys.path.insert(0, abspath("@PYTHONDIR@"))
-
-# Now the path is set, import our applet
 import mate_invest, mate_invest.applet, mate_invest.help
 
 # Prepare i18n
