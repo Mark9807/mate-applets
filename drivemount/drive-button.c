@@ -22,16 +22,14 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif
 
 #include <gio/gio.h>
 #include "drive-button.h"
 #include <glib/gi18n.h>
 #include <gdk/gdkkeysyms.h>
-#if GTK_CHECK_VERSION (3, 0, 0)
 #include <gio/gdesktopappinfo.h>
-#endif
 
 #include <string.h>
 
@@ -70,37 +68,32 @@ drive_button_class_init (DriveButtonClass *class)
     GTK_WIDGET_CLASS(class)->button_press_event = drive_button_button_press;
     GTK_WIDGET_CLASS(class)->key_press_event = drive_button_key_press;
 
-#if GTK_CHECK_VERSION (3, 0, 0)
     GtkCssProvider *provider;
 
     provider = gtk_css_provider_new ();
+
+#if GTK_CHECK_VERSION (3, 20, 0)
     gtk_css_provider_load_from_data (provider,
-                                     "DriveButton {\n"
+                                     "#drive-button {\n"
+                                     " border-width: 0px;\n"
+                                     " padding: 0px;\n"
+                                     " margin: 0px;\n"
+                                     "}",
+                                     -1, NULL);
+#else
+    gtk_css_provider_load_from_data (provider,
+                                     "#drive-button {\n"
                                      " border-width: 0px;\n"
                                      " -GtkWidget-focus-line-width: 0px;\n"
                                      " -GtkWidget-focus-padding: 0px;\n"
                                      "}",
                                      -1, NULL);
+#endif
+
     gtk_style_context_add_provider_for_screen (gdk_screen_get_default(),
                                     GTK_STYLE_PROVIDER (provider),
                                     GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref (provider);
-
-#else
-    gtk_rc_parse_string ("\n"
-			 "   style \"drive-button-style\"\n"
-			 "   {\n"
-			 "      GtkWidget::focus-line-width=0\n"
-			 "      GtkWidget::focus-padding=0\n"
-			 "      bg_pixmap[NORMAL] = \"<parent>\"\n"
-			 "      bg_pixmap[ACTIVE] = \"<parent>\"\n"
-			 "      bg_pixmap[PRELIGHT] = \"<parent>\"\n"
-			 "      bg_pixmap[INSENSITIVE] = \"<parent>\"\n"
-			 "   }\n"
-			 "\n"
-			 "    class \"DriveButton\" style \"drive-button-style\"\n"
-			 "\n");
-#endif
 }
 
 static void
@@ -118,6 +111,8 @@ drive_button_init (DriveButton *self)
     self->update_tag = 0;
 
     self->popup_menu = NULL;
+
+    gtk_widget_set_name (GTK_WIDGET (self), "drive-button");
 }
 
 GtkWidget *
@@ -126,11 +121,12 @@ drive_button_new (GVolume *volume)
     DriveButton *self;
 
     self = g_object_new (DRIVE_TYPE_BUTTON, NULL);
-    drive_button_set_volume (self, volume);
-    
-    g_signal_connect (gtk_icon_theme_get_default (),
-        "changed", G_CALLBACK (drive_button_theme_change),
-        self);  
+    if (volume != NULL) {
+      drive_button_set_volume (self, volume);
+      g_signal_connect (gtk_icon_theme_get_default (),
+          "changed", G_CALLBACK (drive_button_theme_change),
+          self);
+    }
 
     return (GtkWidget *)self;
 }
@@ -142,10 +138,10 @@ drive_button_new_from_mount (GMount *mount)
 
     self = g_object_new (DRIVE_TYPE_BUTTON, NULL);
     drive_button_set_mount (self, mount);
-    
+
     g_signal_connect (gtk_icon_theme_get_default (),
         "changed", G_CALLBACK (drive_button_theme_change),
-        self);      
+        self);
 
     return (GtkWidget *)self;
 }
@@ -180,6 +176,25 @@ drive_button_unrealize (GtkWidget *widget)
 }
 #endif /* 0 */
 
+#if GTK_CHECK_VERSION(3, 22, 0)
+static int
+_gtk_get_monitor_num (GdkMonitor *monitor)
+{
+    GdkDisplay *display;
+    int n_monitors, i;
+
+    display = gdk_monitor_get_display(monitor);
+    n_monitors = gdk_display_get_n_monitors(display);
+
+    for(i = 0; i < n_monitors; i++)
+    {
+        if(gdk_display_get_monitor(display, i) == monitor) return i;
+    }
+
+    return -1;
+}
+#endif
+
 /* the following function is adapted from gtkmenuitem.c */
 static void
 position_menu (GtkMenu *menu, gint *x, gint *y,
@@ -192,7 +207,12 @@ position_menu (GtkMenu *menu, gint *x, gint *y,
     GtkRequisition requisition;
     GtkTextDirection direction;
     GdkRectangle monitor;
+#if GTK_CHECK_VERSION (3, 22, 0)
+    GdkMonitor *monitor_num;
+    GdkDisplay *display;
+#else
     gint monitor_num;
+#endif
 
     g_return_if_fail (menu != NULL);
     g_return_if_fail (x != NULL);
@@ -202,18 +222,22 @@ position_menu (GtkMenu *menu, gint *x, gint *y,
 
     direction = gtk_widget_get_direction (widget);
 
-#if GTK_CHECK_VERSION (3, 0, 0)
     gtk_widget_get_preferred_size (GTK_WIDGET (menu), &requisition, NULL);
-#else
-    gtk_widget_get_requisition (GTK_WIDGET (menu), &requisition);
-#endif
     twidth = requisition.width;
     theight = requisition.height;
 
     screen = gtk_widget_get_screen (GTK_WIDGET (menu));
+#if GTK_CHECK_VERSION (3, 22, 0)
+    display =gdk_screen_get_display (screen);
+    monitor_num = gdk_display_get_monitor_at_window (display, gtk_widget_get_window (widget));
+    if (monitor_num == NULL)
+        monitor_num = gdk_display_get_monitor (display, 0);
+    gdk_monitor_get_geometry (monitor_num, &monitor);
+#else
     monitor_num = gdk_screen_get_monitor_at_window (screen, gtk_widget_get_window (widget));
     if (monitor_num < 0) monitor_num = 0;
     gdk_screen_get_monitor_geometry (screen, monitor_num, &monitor);
+#endif
 
     if (!gdk_window_get_origin (gtk_widget_get_window (widget), &tx, &ty)) {
 	g_warning ("Menu not on screen");
@@ -238,7 +262,12 @@ position_menu (GtkMenu *menu, gint *x, gint *y,
 
     *x = CLAMP (tx, monitor.x, MAX (monitor.x, monitor.x + monitor.width - twidth));
     *y = ty;
+
+#if GTK_CHECK_VERSION (3, 22, 0)
+    gtk_menu_set_monitor (menu, _gtk_get_monitor_num (monitor_num));
+#else
     gtk_menu_set_monitor (menu, monitor_num);
+#endif
 }
 
 static gboolean
@@ -338,6 +367,7 @@ drive_button_update (gpointer user_data)
     GIcon *icon;
     int width, height;
     GdkPixbuf *pixbuf = NULL, *scaled;
+    GdkPixbuf *tmp_pixbuf = NULL;
     GtkRequisition button_req, image_req;
     char *display_name, *tip;
 
@@ -345,88 +375,141 @@ drive_button_update (gpointer user_data)
     self = DRIVE_BUTTON (user_data);
     self->update_tag = 0;
 
+    /* base the icon size on the desired button size */
     drive_button_reset_popup (self);
+    gtk_widget_get_preferred_size (GTK_WIDGET (self), NULL, &button_req);
+    gtk_widget_get_preferred_size (gtk_bin_get_child (GTK_BIN (self)), NULL, &image_req);
+    width = self->icon_size - (button_req.width - image_req.width);
+    height = self->icon_size - (button_req.height - image_req.height);
 
-    /* if no volume or mount, unset image */
-    if (!self->volume && !self->mount) {
-	if (gtk_bin_get_child (GTK_BIN (self)) != NULL)
-	    gtk_image_set_from_pixbuf (GTK_IMAGE (gtk_bin_get_child (GTK_BIN (self))), NULL);
-	return FALSE;
+    /* if no volume or mount, display general image */
+    if (!self->volume && !self->mount)
+    {
+        gtk_widget_set_tooltip_text (GTK_WIDGET (self), "nothing to mount");
+        screen = gtk_widget_get_screen (GTK_WIDGET (self));
+        icon_theme = gtk_icon_theme_get_for_screen (screen); //m
+        // note - other good icon would be emblem-unreadable
+        icon_info = gtk_icon_theme_lookup_icon (icon_theme, "media-floppy",
+                                                MIN (width, height),
+                                                GTK_ICON_LOOKUP_USE_BUILTIN);
+        if (icon_info) {
+            pixbuf = gtk_icon_info_load_icon (icon_info, NULL);
+            g_object_unref (icon_info);
+        }
+
+        if (!pixbuf)
+            return FALSE;
+        scaled = gdk_pixbuf_scale_simple (pixbuf, width, height, GDK_INTERP_BILINEAR);
+        if (scaled) {
+            g_object_unref (pixbuf);
+            pixbuf = scaled;
+        }
+        if (gtk_bin_get_child (GTK_BIN (self)) != NULL)
+            gtk_image_set_from_pixbuf (GTK_IMAGE (gtk_bin_get_child (GTK_BIN (self))), pixbuf);
+        return FALSE;
     }
 
-    if (self->volume) {
-	GMount *mount;
+    gboolean is_mounted = FALSE;
 
-	display_name = g_volume_get_name (self->volume);
-	mount = g_volume_get_mount (self->volume);
+    if (self->volume)
+    {
+        GMount *mount;
 
-	if (mount)
-	    tip = g_strdup_printf ("%s\n%s", display_name, _("(mounted)"));
-	else
-	    tip = g_strdup_printf ("%s\n%s", display_name, _("(not mounted)"));
+        display_name = g_volume_get_name (self->volume);
+        mount = g_volume_get_mount (self->volume);
 
-	if (mount)
-	    icon = g_mount_get_icon (mount);
-	else
-	    icon = g_volume_get_icon (self->volume);
+        if (mount)
+        {
+            is_mounted = TRUE;
+            tip = g_strdup_printf ("%s\n%s", display_name, _("(mounted)"));
+        }
+        else
+        {
+            is_mounted = FALSE;
+            tip = g_strdup_printf ("%s\n%s", display_name, _("(not mounted)"));
+        }
+        if (mount)
+            icon = g_mount_get_icon (mount);
+        else
+            icon = g_volume_get_icon (self->volume);
 
-	if (mount)
-	    g_object_unref (mount);
-    } else {
-	display_name = g_mount_get_name (self->mount);
-	tip = g_strdup_printf ("%s\n%s", display_name, _("(mounted)"));
-	icon = g_mount_get_icon (self->mount);
+        if (mount)
+            g_object_unref (mount);
+    } else
+    {
+        is_mounted = TRUE;
+        display_name = g_mount_get_name (self->mount);
+        tip = g_strdup_printf ("%s\n%s", display_name, _("(mounted)"));
+        icon = g_mount_get_icon (self->mount);
     }
 
     gtk_widget_set_tooltip_text (GTK_WIDGET (self), tip);
     g_free (tip);
     g_free (display_name);
 
-    /* base the icon size on the desired button size */
-#if GTK_CHECK_VERSION (3, 0, 0)
-    gtk_widget_get_preferred_size (GTK_WIDGET (self), NULL, &button_req);
-    gtk_widget_get_preferred_size (gtk_bin_get_child (GTK_BIN (self)), NULL, &image_req);
-#else
-    gtk_widget_size_request (GTK_WIDGET (self), &button_req);
-    gtk_widget_size_request (gtk_bin_get_child (GTK_BIN (self)), &image_req);
-#endif
-    width = self->icon_size - (button_req.width - image_req.width);
-    height = self->icon_size - (button_req.height - image_req.height);
-
     screen = gtk_widget_get_screen (GTK_WIDGET (self));
     icon_theme = gtk_icon_theme_get_for_screen (screen);
     icon_info = gtk_icon_theme_lookup_by_gicon (icon_theme, icon,
-    						MIN (width, height),
-    						GTK_ICON_LOOKUP_USE_BUILTIN);
+                                               MIN (width, height),
+                                               GTK_ICON_LOOKUP_USE_BUILTIN);
     if (icon_info)
     {
-	pixbuf = gtk_icon_info_load_icon (icon_info, NULL);
-#if GTK_CHECK_VERSION (3, 0, 0)
-	g_object_unref (icon_info);
-#else
-	gtk_icon_info_free (icon_info);
-#endif
+        pixbuf = gtk_icon_info_load_icon (icon_info, NULL);
+        g_object_unref (icon_info);
     }
 
     g_object_unref (icon);
 
     if (!pixbuf)
-	return FALSE;
+        return FALSE;
 
-    scaled = gdk_pixbuf_scale_simple (pixbuf, width, height, GDK_INTERP_BILINEAR);
-    if (scaled) {
-	g_object_unref (pixbuf);
-	pixbuf = scaled;
+    // make a copy of pixbuf becasue icon image can be shared by system
+    tmp_pixbuf = gdk_pixbuf_copy (pixbuf);
+    g_object_unref (pixbuf);
+    g_assert (tmp_pixbuf != NULL);
+
+    // if mounted, change icon
+    if (is_mounted)
+    {
+        int icon_width, icon_height, rowstride, n_channels, x, y;
+        guchar *pixels, *p;
+
+        n_channels = gdk_pixbuf_get_n_channels (tmp_pixbuf);
+        g_assert (gdk_pixbuf_get_colorspace (tmp_pixbuf) == GDK_COLORSPACE_RGB);
+        g_assert (gdk_pixbuf_get_bits_per_sample (tmp_pixbuf) == 8);
+        g_assert (gdk_pixbuf_get_has_alpha (tmp_pixbuf));
+        g_assert (n_channels == 4);
+        icon_width = gdk_pixbuf_get_width (tmp_pixbuf);
+        icon_height = gdk_pixbuf_get_height (tmp_pixbuf);
+
+        rowstride = gdk_pixbuf_get_rowstride (tmp_pixbuf);
+        pixels = gdk_pixbuf_get_pixels (tmp_pixbuf);
+
+        const gdouble ratio = 0.65;
+        gdouble y_start = icon_height * ratio;
+        gdouble x_start = icon_height * (1 + ratio);
+
+        for (y = y_start; y < icon_height; y++)
+            for (x = x_start - y; x < icon_width; x++)
+            {
+                p = pixels + y * rowstride + x * n_channels;
+                p[0] = 0;
+                p[1] = 230;
+                p[2] = 0;
+                p[3] = 255;
+            }
     }
 
-    gtk_image_set_from_pixbuf (GTK_IMAGE (gtk_bin_get_child (GTK_BIN (self))), pixbuf);
-    g_object_unref (pixbuf);
+    scaled = gdk_pixbuf_scale_simple (tmp_pixbuf, width, height, GDK_INTERP_BILINEAR);
+    if (scaled) {
+        g_object_unref (tmp_pixbuf);
+        tmp_pixbuf = scaled;
+    }
 
-#if GTK_CHECK_VERSION (3, 0, 0)
+    gtk_image_set_from_pixbuf (GTK_IMAGE (gtk_bin_get_child (GTK_BIN (self))), tmp_pixbuf);
+    g_object_unref (tmp_pixbuf);
+
     gtk_widget_get_preferred_size (GTK_WIDGET (self), NULL, &button_req);
-#else
-    gtk_widget_size_request (GTK_WIDGET (self), &button_req);
-#endif
 
     return FALSE;
 }
@@ -554,60 +637,31 @@ open_drive (DriveButton *self, GtkWidget *item)
     GdkScreen *screen;
     GtkWidget *dialog;
     GError *error = NULL;
-#if GTK_CHECK_VERSION (3, 0, 0)
     GFile *file = NULL;
     GList *files = NULL;
     GdkAppLaunchContext *launch_context;
     GAppInfo *app_info;
-#else
-    char *argv[3] = { "caja", NULL, NULL };
-
-    screen = gtk_widget_get_screen (GTK_WIDGET (self));
-#endif
 
     if (self->volume) {
 	GMount *mount;
 
 	mount = g_volume_get_mount (self->volume);
 	if (mount) {
-#if !GTK_CHECK_VERSION (3, 0, 0)
-	    GFile *file;
-#endif
-
 	    file = g_mount_get_root (mount);
-
-#if !GTK_CHECK_VERSION (3, 0, 0)
-	    argv[1] = g_file_get_uri (file);
-	    g_object_unref(file);
-#endif
-
 	    g_object_unref(mount);
 	}
     } else if (self->mount) {
-#if !GTK_CHECK_VERSION (3, 0, 0)
-	GFile *file;
-#endif
-
 	file = g_mount_get_root (self->mount);
-#if !GTK_CHECK_VERSION (3, 0, 0)
-	argv[1] = g_file_get_uri (file);
-	g_object_unref(file);
-#endif
     } else
 	g_return_if_reached();
 
-#if GTK_CHECK_VERSION (3, 0, 0)
     app_info = g_app_info_get_default_for_type("inode/directory", FALSE);
     if (!app_info)
       app_info = G_APP_INFO (g_desktop_app_info_new ("caja.desktop"));
 
     if (app_info) {
-#if GTK_CHECK_VERSION (3, 0, 0)
 	GdkDisplay *display = gtk_widget_get_display (item);
 	launch_context = gdk_display_get_app_launch_context (display);
-#else
-	launch_context = gdk_app_launch_context_new ();
-#endif
 	screen = gtk_widget_get_screen (GTK_WIDGET (self));
 	gdk_app_launch_context_set_screen (launch_context, screen);
 	files = g_list_prepend (files, file);
@@ -621,21 +675,11 @@ open_drive (DriveButton *self, GtkWidget *item)
     }
 
     if (!app_info || error) {
-#else
-    if (!gdk_spawn_on_screen (screen, NULL, argv, NULL,
-			      G_SPAWN_SEARCH_PATH,
-			      NULL, NULL, NULL, &error)) {
-#endif
 	dialog = gtk_message_dialog_new (GTK_WINDOW (gtk_widget_get_toplevel (GTK_WIDGET (self))),
 						     GTK_DIALOG_DESTROY_WITH_PARENT,
 						     GTK_MESSAGE_ERROR,
 						     GTK_BUTTONS_OK,
-#if GTK_CHECK_VERSION (3, 0, 0)
 						     _("Cannot execute Caja"));
-#else
-						     _("Cannot execute '%s'"),
-						     argv[0]);
-#endif
 	if (error)
 	    gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog), error->message, NULL);
 	else
@@ -645,11 +689,8 @@ open_drive (DriveButton *self, GtkWidget *item)
 	gtk_widget_show (dialog);
 	g_error_free (error);
     }
-#if GTK_CHECK_VERSION (3, 0, 0)
+
     g_object_unref(file);
-#else
-    g_free (argv[1]);
-#endif
 }
 
 /* copied from mate-volume-manager/src/manager.c maybe there is a better way than
@@ -721,11 +762,11 @@ gvm_check_dvd_only (const char *udi, const char *device, const char *mount_point
 {
 	char *path;
 	gboolean retval;
-	
+
 	path = g_build_path (G_DIR_SEPARATOR_S, mount_point, "video_ts", NULL);
 	retval = g_file_test (path, G_FILE_TEST_IS_DIR);
 	g_free (path);
-	
+
 	/* try the other name, if needed */
 	if (retval == FALSE) {
 		path = g_build_path (G_DIR_SEPARATOR_S, mount_point,
@@ -733,7 +774,7 @@ gvm_check_dvd_only (const char *udi, const char *device, const char *mount_point
 		retval = g_file_test (path, G_FILE_TEST_IS_DIR);
 		g_free (path);
 	}
-	
+
 	return retval;
 }
 /* END copied from mate-volume-manager/src/manager.c */
@@ -755,7 +796,7 @@ check_dvd_video (DriveButton *self)
 
 	file = g_mount_get_root (mount);
 	g_object_unref (mount);
-	
+
 	if (!file)
 		return FALSE;
 
@@ -933,20 +974,24 @@ drive_button_ensure_popup (DriveButton *self)
     mounted = FALSE;
 
     if (self->volume) {
-	GMount *mount = NULL;
+		GMount *mount = NULL;
 
-	display_name = g_volume_get_name (self->volume);
-	ejectable = g_volume_can_eject (self->volume);
+		display_name = g_volume_get_name (self->volume);
+		ejectable = g_volume_can_eject (self->volume);
 
-	mount = g_volume_get_mount (self->volume);
-	if (mount) {
-	    mounted = TRUE;
-	    g_object_unref (mount);
-	}
+		mount = g_volume_get_mount (self->volume);
+		if (mount) {
+		    mounted = TRUE;
+		    g_object_unref (mount);
+		}
     } else {
-	display_name = g_mount_get_name (self->mount);
-	ejectable = g_mount_can_eject (self->mount);
-	mounted = TRUE;
+    	if (!G_IS_MOUNT(self->volume))
+    		return;
+		else {
+			display_name = g_mount_get_name (self->mount);
+			ejectable = g_mount_can_eject (self->mount);
+			mounted = TRUE;
+		}
     }
 
     self->popup_menu = gtk_menu_new ();
@@ -994,7 +1039,6 @@ drive_button_ensure_popup (DriveButton *self)
 	gtk_container_add (GTK_CONTAINER (self->popup_menu), item);
     }
 
-#if GTK_CHECK_VERSION (3, 0, 0)
 	/*Set up custom theme and transparency support */
 	GtkWidget *toplevel = gtk_widget_get_toplevel (self->popup_menu);
 	/* Fix any failures of compiz/other wm's to communicate with gtk for transparency */
@@ -1006,5 +1050,4 @@ drive_button_ensure_popup (DriveButton *self)
 	context = gtk_widget_get_style_context (GTK_WIDGET(toplevel));
 	gtk_style_context_add_class(context,"gnome-panel-menu-bar");
 	gtk_style_context_add_class(context,"mate-panel-menu-bar");
-#endif
 }

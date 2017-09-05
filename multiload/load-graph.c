@@ -12,12 +12,9 @@
 #include <gio/gio.h>
 #include <mate-panel-applet.h>
 #include <mate-panel-applet-gsettings.h>
+#include <math.h>
 
 #include "global.h"
-
-#if GTK_CHECK_VERSION (3, 0, 0)
-#define gtk_vbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_VERTICAL,Y)
-#endif
 
 /*
   Shifts data right
@@ -41,7 +38,7 @@ shift_right(LoadGraph *g)
 
 	/* data[i+1] = data[i] */
 	for(i = g->draw_width - 1; i != 0; --i)
-		g->data[i] = g->data[i-1];
+		g->data[i] = g->data[i - 1];
 
 	g->data[0] = last_data;
 }
@@ -51,48 +48,93 @@ shift_right(LoadGraph *g)
 static void
 load_graph_draw (LoadGraph *g)
 {
-    guint i, j;
-    cairo_t *cr;
+  guint i, j, k;
+  cairo_t *cr;
+  int load;
 
-    /* we might get called before the configure event so that
-     * g->disp->allocation may not have the correct size
-     * (after the user resized the applet in the prop dialog). */
+  /* we might get called before the configure event so that
+   * g->disp->allocation may not have the correct size
+   * (after the user resized the applet in the prop dialog). */
 
-    if (!g->surface)
-		g->surface = gdk_window_create_similar_surface (gtk_widget_get_window (g->disp),
-								CAIRO_CONTENT_COLOR,
-								g->draw_width, g->draw_height);
+  if (!g->surface)
+    g->surface = gdk_window_create_similar_surface (gtk_widget_get_window (g->disp),
+                                                    CAIRO_CONTENT_COLOR,
+                                                    g->draw_width, g->draw_height);
 
-    cr = cairo_create (g->surface);
-    cairo_set_line_width (cr, 1.0);
-    cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
-    cairo_set_line_join (cr, CAIRO_LINE_JOIN_ROUND);
+  cr = cairo_create (g->surface);
+  cairo_set_line_width (cr, 1.0);
+  cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join (cr, CAIRO_LINE_JOIN_ROUND);
 
+  /* all graphs except Load go this path */
+  if (g->id != 4)
+  {
     for (i = 0; i < g->draw_width; i++)
-		g->pos [i] = g->draw_height - 1;
+      g->pos [i] = g->draw_height - 1;
 
     for (j = 0; j < g->n; j++)
     {
-#if GTK_CHECK_VERSION (3, 0, 0)
-		gdk_cairo_set_source_rgba (cr, &(g->colors [j]));
-#else
-		gdk_cairo_set_source_color (cr, &(g->colors [j]));
-#endif
+      gdk_cairo_set_source_rgba (cr, &(g->colors [j]));
 
-		for (i = 0; i < g->draw_width; i++) {
-			if (g->data [i][j] != 0) {
-				cairo_move_to (cr, g->draw_width - i - 0.5, g->pos[i] + 0.5);
-				cairo_line_to (cr, g->draw_width - i - 0.5, g->pos[i] - (g->data [i][j] - 0.5));
-
-				g->pos [i] -= g->data [i][j];
-			}
-		}
-		cairo_stroke (cr);
+      for (i = 0; i < g->draw_width; i++)
+      {
+        if (g->data [i][j] != 0)
+        {
+          cairo_move_to (cr, g->draw_width - i - 0.5, g->pos[i] + 0.5);
+          cairo_line_to (cr, g->draw_width - i - 0.5, g->pos[i] - (g->data [i][j] - 0.5));
+        }
+        g->pos [i] -= g->data [i][j];
+      }
+      cairo_stroke (cr);
     }
 
-    gtk_widget_queue_draw (g->disp);
+  }
+  /* this is Load graph */
+  else
+  {
+    guint maxload =	1;
+    for (i = 0; i < g->draw_width; i++)
+    {
+      g->pos [i] = g->draw_height - 1;
+      /* find maximum value */
+      if (g->data[i][0] > maxload)
+        maxload = g->data[i][0];
+    }
+    load = ceil ((double) (maxload/g->draw_height)) + 1;
+    load = MAX (load,1);
 
-    cairo_destroy (cr);
+    for (j = 0; j < g->n; j++)
+    {
+      gdk_cairo_set_source_rgba (cr, &(g->colors [j]));
+
+      for (i = 0; i < g->draw_width; i++)
+      {
+        cairo_move_to (cr, g->draw_width - i - 0.5, g->pos[i] + 0.5);
+        if (j == 0)
+        {
+          cairo_line_to (cr, g->draw_width - i - 0.5, g->pos[i] - ((g->data [i][j] - 0.5)/load));
+        }
+        else
+        {
+          cairo_line_to (cr, g->draw_width - i - 0.5, 0.5);
+        }
+        g->pos [i] -= g->data [i][j] / load;
+      }
+      cairo_stroke (cr);
+    }
+
+    /* draw grid lines in Load graph if needed */
+    gdk_cairo_set_source_rgba (cr, &(g->colors [2]));
+    for (k = 0; k < load - 1; k++)
+    {
+      cairo_move_to (cr, 0.5, (g->draw_height/load)*(k+1));
+      cairo_line_to (cr, g->draw_width-0.5, (g->draw_height/load)*(k+1));
+    }
+    cairo_stroke (cr);
+  }
+  gtk_widget_queue_draw (g->disp);
+
+  cairo_destroy (cr);
 }
 
 /* Updates the load graph when the timeout expires */
@@ -131,7 +173,7 @@ load_graph_unalloc (LoadGraph *g)
 
     g->pos = NULL;
     g->data = NULL;
-    
+
     g->size = g_settings_get_int(g->multiload->settings, "size");
     g->size = MAX (g->size, 10);
 
@@ -169,7 +211,7 @@ load_graph_configure (GtkWidget *widget, GdkEventConfigure *event,
 {
     GtkAllocation allocation;
     LoadGraph *c = (LoadGraph *) data_ptr;
-    
+
     load_graph_unalloc (c);
 
     gtk_widget_get_allocation (c->disp, &allocation);
@@ -178,7 +220,7 @@ load_graph_configure (GtkWidget *widget, GdkEventConfigure *event,
     c->draw_height = allocation.height;
     c->draw_width = MAX (c->draw_width, 1);
     c->draw_height = MAX (c->draw_height, 1);
-    
+
     load_graph_alloc (c);
 
     if (!c->surface)
@@ -192,28 +234,13 @@ load_graph_configure (GtkWidget *widget, GdkEventConfigure *event,
 
 static gint
 load_graph_expose (GtkWidget *widget,
-#if GTK_CHECK_VERSION (3, 0, 0)
 		   cairo_t *cr,
-#else
-		   GdkEventExpose *event,
-#endif
 		   gpointer data_ptr)
 {
     LoadGraph *g = (LoadGraph *) data_ptr;
 
-#if !GTK_CHECK_VERSION (3, 0, 0)
-    cairo_t *cr;
-    cr = gdk_cairo_create (event->window);
-    gdk_cairo_region (cr, event->region);
-    cairo_clip (cr);
-#endif
-
     cairo_set_source_surface (cr, g->surface, 0, 0);
     cairo_paint (cr);
-
-#if !GTK_CHECK_VERSION (3, 0, 0)
-    cairo_destroy (cr);
-#endif
 
     return FALSE;
 }
@@ -264,50 +291,32 @@ load_graph_leave_cb(GtkWidget *widget, GdkEventCrossing *event, gpointer data)
 static void
 load_graph_load_config (LoadGraph *g)
 {
-#if GTK_CHECK_VERSION (3, 0, 0)
     gchar *name, *temp;
-#else
-    gchar name [BUFSIZ], *temp;
-#endif
     guint i;
 
 	if (!g->colors)
-#if GTK_CHECK_VERSION (3, 0, 0)
 		g->colors = g_new0(GdkRGBA, g->n);
-#else
-		g->colors = g_new0(GdkColor, g->n);
-#endif
-		
+
 	for (i = 0; i < g->n; i++)
 	{
-#if GTK_CHECK_VERSION (3, 0, 0)
 		name = g_strdup_printf ("%s-color%u", g->name, i);
-#else
-		g_snprintf(name, sizeof(name), "%s-color%u", g->name, i);
-#endif
 		temp = g_settings_get_string(g->multiload->settings, name);
 		if (!temp)
 			temp = g_strdup ("#000000");
-#if GTK_CHECK_VERSION (3, 0, 0)
 		gdk_rgba_parse(&(g->colors[i]), temp);
-#else
-		gdk_color_parse(temp, &(g->colors[i]));
-#endif
 		g_free(temp);
-#if GTK_CHECK_VERSION (3, 0, 0)
 		g_free(name);
-#endif
 	}
 }
 
 LoadGraph *
 load_graph_new (MultiloadApplet *ma, guint n, const gchar *label,
-		guint id, guint speed, guint size, gboolean visible, 
+		guint id, guint speed, guint size, gboolean visible,
 		const gchar *name, LoadGraphDataFunc get_data)
 {
     LoadGraph *g;
     MatePanelAppletOrient orient;
-    
+
     g = g_new0 (LoadGraph, 1);
     g->netspeed_in = netspeed_new(g);
     g->netspeed_out = netspeed_new(g);
@@ -321,11 +330,11 @@ load_graph_new (MultiloadApplet *ma, guint n, const gchar *label,
     g->tooltip_update = FALSE;
     g->show_frame = TRUE;
     g->multiload = ma;
-		
-    g->main_widget = gtk_vbox_new (FALSE, 0);
 
-    g->box = gtk_vbox_new (FALSE, 0);
-    
+    g->main_widget = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+
+    g->box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+
     orient = mate_panel_applet_get_orient (g->multiload->applet);
     switch (orient)
     {
@@ -344,7 +353,7 @@ load_graph_new (MultiloadApplet *ma, guint n, const gchar *label,
     default:
 	g_assert_not_reached ();
     }
-    
+
     if (g->show_frame)
     {
 	g->frame = gtk_frame_new (NULL);
@@ -374,12 +383,8 @@ load_graph_new (MultiloadApplet *ma, guint n, const gchar *label,
 				    GDK_ENTER_NOTIFY_MASK |
     				    GDK_LEAVE_NOTIFY_MASK |
 				    GDK_BUTTON_PRESS_MASK);
-	
-#if GTK_CHECK_VERSION (3, 0, 0)
+
     g_signal_connect (G_OBJECT (g->disp), "draw",
-#else
-    g_signal_connect (G_OBJECT (g->disp), "expose_event",
-#endif
 			G_CALLBACK (load_graph_expose), g);
     g_signal_connect (G_OBJECT(g->disp), "configure_event",
 			G_CALLBACK (load_graph_configure), g);
@@ -391,8 +396,8 @@ load_graph_new (MultiloadApplet *ma, guint n, const gchar *label,
                       G_CALLBACK(load_graph_enter_cb), g);
     g_signal_connect (G_OBJECT(g->disp), "leave-notify-event",
                       G_CALLBACK(load_graph_leave_cb), g);
-	
-    gtk_box_pack_start (GTK_BOX (g->box), g->disp, TRUE, TRUE, 0);    
+
+    gtk_box_pack_start (GTK_BOX (g->box), g->disp, TRUE, TRUE, 0);
     gtk_widget_show_all(g->box);
 
     return g;
@@ -413,6 +418,6 @@ load_graph_stop (LoadGraph *g)
 {
     if (g->timer_index != -1)
 		g_source_remove (g->timer_index);
-    
+
     g->timer_index = -1;
 }

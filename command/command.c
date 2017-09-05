@@ -23,6 +23,7 @@
  */
 
 #include <config.h>
+#include <string.h>
 
 #include <glib.h>
 #include <glib/gi18n.h>
@@ -47,10 +48,6 @@
 #define GK_COMMAND_GROUP   "Command"
 #define GK_COMMAND_OUTPUT  "Output"
 #define GK_COMMAND_ICON    "Icon"
-
-#if GTK_CHECK_VERSION (3, 0, 0)
-#define gtk_hbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_HORIZONTAL,Y)
-#endif
 
 typedef struct
 {
@@ -126,11 +123,7 @@ static void
 command_settings_callback (GtkAction *action, CommandApplet *command_applet)
 {
     GtkDialog *dialog;
-#if GTK_CHECK_VERSION (3, 0, 0)
     GtkGrid *grid;
-#else
-    GtkTable *table;
-#endif
     GtkWidget *widget;
     GtkWidget *command;
     GtkWidget *interval;
@@ -143,15 +136,9 @@ command_settings_callback (GtkAction *action, CommandApplet *command_applet)
                                                      GTK_STOCK_CLOSE,
                                                      GTK_RESPONSE_CLOSE,
                                                      NULL));
-#if GTK_CHECK_VERSION (3, 0, 0)
     grid = GTK_GRID (gtk_grid_new ());
     gtk_grid_set_row_spacing (grid, 12);
     gtk_grid_set_column_spacing (grid, 12);
-#else
-    table = GTK_TABLE (gtk_table_new (4, 2, FALSE));
-    gtk_table_set_row_spacings (table, 12);
-    gtk_table_set_col_spacings (table, 12);
-#endif
 
     gtk_window_set_default_size (GTK_WINDOW (dialog), 350, 150);
     gtk_container_set_border_width (GTK_CONTAINER (dialog), 10);
@@ -163,21 +150,10 @@ command_settings_callback (GtkAction *action, CommandApplet *command_applet)
 #else
     gtk_misc_set_alignment (GTK_MISC (widget), 1.0, 0.5);
 #endif
-#if GTK_CHECK_VERSION (3, 0, 0)
     gtk_grid_attach (grid, widget, 1, 0, 1, 1);
 
     command = gtk_entry_new ();
     gtk_grid_attach (grid, command, 2, 0, 1, 1);
-#else
-    gtk_table_attach (table, widget, 1, 2, 0, 1,
-                      GTK_FILL, GTK_FILL,
-                      0, 0);
-
-    command = gtk_entry_new ();
-    gtk_table_attach (table, command, 2, 3, 0, 1,
-                      GTK_EXPAND | GTK_FILL | GTK_SHRINK, GTK_FILL,
-                      0, 0);
-#endif
 
     widget = gtk_label_new (_("Interval (seconds):"));
 #if GTK_CHECK_VERSION (3, 16, 0)
@@ -186,21 +162,10 @@ command_settings_callback (GtkAction *action, CommandApplet *command_applet)
 #else
     gtk_misc_set_alignment (GTK_MISC (widget), 1.0, 0.5);
 #endif
-#if GTK_CHECK_VERSION (3, 0, 0)
     gtk_grid_attach (grid, widget, 1, 1, 1, 1);
 
     interval = gtk_spin_button_new_with_range (1.0, 600.0, 1.0);
     gtk_grid_attach (grid, interval, 2, 1, 1, 1);
-#else
-    gtk_table_attach (table, widget, 1, 2, 1, 2,
-                      GTK_FILL, GTK_FILL,
-                      0, 0);
-
-    interval = gtk_spin_button_new_with_range (1.0, 600.0, 1.0);
-    gtk_table_attach (table, interval, 2, 3, 1, 2,
-                      GTK_EXPAND | GTK_FILL | GTK_SHRINK, GTK_FILL,
-                      0, 0);
-#endif
 
     widget = gtk_label_new (_("Maximum width (chars):"));
 #if GTK_CHECK_VERSION (3, 16, 0)
@@ -209,7 +174,6 @@ command_settings_callback (GtkAction *action, CommandApplet *command_applet)
 #else
     gtk_misc_set_alignment (GTK_MISC (widget), 1.0, 0.5);
 #endif
-#if GTK_CHECK_VERSION (3, 0, 0)
     gtk_grid_attach (grid, widget, 1, 2, 1, 1);
 
     width = gtk_spin_button_new_with_range(1.0, 100.0, 1.0);
@@ -219,23 +183,6 @@ command_settings_callback (GtkAction *action, CommandApplet *command_applet)
     gtk_grid_attach (grid, showicon, 2, 3, 1, 1);
 
     gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (dialog)), GTK_WIDGET (grid), TRUE, TRUE, 0);
-#else
-    gtk_table_attach (table, widget, 1, 2, 2, 3,
-                      GTK_FILL, GTK_FILL,
-                      0, 0);
-
-    width = gtk_spin_button_new_with_range(1.0, 100.0, 1.0);
-    gtk_table_attach (table, width, 2, 3, 2, 3,
-                      GTK_EXPAND | GTK_FILL | GTK_SHRINK, GTK_FILL,
-                      0, 0);
-
-    showicon = gtk_check_button_new_with_label (_("Show icon"));
-    gtk_table_attach (table, showicon, 2, 3, 3, 4,
-                      GTK_EXPAND | GTK_FILL | GTK_SHRINK, GTK_FILL,
-                      0, 0);
-
-    gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (dialog)), GTK_WIDGET (table), TRUE, TRUE, 0);
-#endif
 
     g_signal_connect (dialog, "response", G_CALLBACK (gtk_widget_destroy), dialog);
 
@@ -307,7 +254,7 @@ process_command_output (CommandApplet *command_applet, gchar *output)
 {
     gtk_widget_set_tooltip_text (GTK_WIDGET (command_applet->label), command_applet->command);
 
-    if ((output == NULL) || (output[0] == 0))
+    if ((output == NULL) || (output[0] == '\0'))
     {
         gtk_label_set_text (command_applet->label, ERROR_OUTPUT);
         return;
@@ -341,20 +288,13 @@ process_command_output (CommandApplet *command_applet, gchar *output)
     }
     else
     {
-        /* check output length */
-        if (strlen(output) > command_applet->width)
-        {
-            GString *strip_output;
-            strip_output = g_string_new_len (output, command_applet->width);
-            g_free (output);
-            output = strip_output->str;
-            g_string_free (strip_output, FALSE);
-        }
+        /* Remove leading and trailing whitespace */
+        g_strstrip (output);
 
-        /* remove last char if it is '\n' to avoid alignment problems */
-        if (g_str_has_suffix (output, "\n"))
+        /* check output length */
+        if (strlen (output) > command_applet->width)
         {
-            output[strlen(output) - 1] = 0;
+            output[command_applet->width] = '\0';
         }
 
         gtk_label_set_text (command_applet->label, output);
@@ -404,7 +344,7 @@ command_applet_fill (MatePanelApplet* applet)
     command_applet->command = g_settings_get_string (command_applet->settings, COMMAND_KEY);
     command_applet->width = g_settings_get_int (command_applet->settings, WIDTH_KEY);
 
-    command_applet->box = GTK_BOX (gtk_hbox_new (FALSE, 0));
+    command_applet->box = GTK_BOX (gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0));
     command_applet->image = GTK_IMAGE (gtk_image_new_from_icon_name (APPLET_ICON, 24));
     command_applet->label = GTK_LABEL (gtk_label_new (ERROR_OUTPUT));
     command_applet->timeout_id = 0;

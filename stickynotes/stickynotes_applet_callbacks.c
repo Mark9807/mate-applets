@@ -335,10 +335,17 @@ void menu_preferences_cb(GtkAction *action, StickyNotesApplet *applet)
 void menu_help_cb(GtkAction *action, StickyNotesApplet *applet)
 {
 	GError *error = NULL;
+#if GTK_CHECK_VERSION (3, 22, 0)
+	gtk_show_uri_on_window (NULL,
+	                        "help:mate-stickynotes-applet",
+	                        gtk_get_current_event_time (),
+	                        &error);
+#else
 	gtk_show_uri (gtk_widget_get_screen (GTK_WIDGET (applet->w_applet)),
-			"help:mate-stickynotes-applet",
-			gtk_get_current_event_time (),
-			&error);
+	              "help:mate-stickynotes-applet",
+	              gtk_get_current_event_time (),
+	              &error);
+#endif
 	if (error) {
 		GtkWidget *dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
 							   _("There was an error displaying help: %s"), error->message);
@@ -423,7 +430,6 @@ preferences_color_cb (GtkWidget *button, gpointer data)
 {
 	char *color_str, *font_color_str;
 
-#if GTK_CHECK_VERSION (3, 0, 0)
 	GdkRGBA color, font_color;
 
 	gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER (stickynotes->w_prefs_color), &color);
@@ -431,21 +437,6 @@ preferences_color_cb (GtkWidget *button, gpointer data)
 
 	color_str = gdk_rgba_to_string (&color);
 	font_color_str = gdk_rgba_to_string (&font_color);
-#else
-	GdkColor color, font_color;
-
-	gtk_color_button_get_color (GTK_COLOR_BUTTON (stickynotes->w_prefs_color), &color);
-	gtk_color_button_get_color (GTK_COLOR_BUTTON (stickynotes->w_prefs_font_color), &font_color);
-
-	color_str = g_strdup_printf ("#%.2x%.2x%.2x",
-	                             color.red   / 256,
-	                             color.green / 256,
-	                             color.blue  / 256);
-	font_color_str = g_strdup_printf ("#%.2x%.2x%.2x",
-	                                  font_color.red   / 256,
-	                                  font_color.green / 256,
-	                                  font_color.blue  / 256);
-#endif
 
 	g_settings_set_string (stickynotes->settings, "default-color", color_str);
 	g_settings_set_string (stickynotes->settings, "default-font-color", font_color_str);
@@ -540,10 +531,17 @@ void preferences_response_cb(GtkWidget *dialog, gint response, gpointer data)
 {
 	if (response == GTK_RESPONSE_HELP) {
 		GError *error = NULL;
+#if GTK_CHECK_VERSION (3, 22, 0)
+		gtk_show_uri_on_window (GTK_WINDOW (dialog),
+		                        "help:mate-stickynotes-applet/stickynotes-advanced-settings",
+		                        gtk_get_current_event_time (),
+		                        &error);
+#else
 		gtk_show_uri (gtk_widget_get_screen (GTK_WIDGET (dialog)),
-				"help:mate-stickynotes-applet/stickynotes-advanced-settings",
-				gtk_get_current_event_time (),
-				&error);
+		              "help:mate-stickynotes-applet/stickynotes-advanced-settings",
+		              gtk_get_current_event_time (),
+		              &error);
+#endif
 		if (error) {
 			dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
 								   _("There was an error displaying help: %s"), error->message);

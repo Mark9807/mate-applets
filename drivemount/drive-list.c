@@ -22,7 +22,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif
 
 #include <gio/gio.h>
@@ -30,11 +30,7 @@
 #include "drive-button.h"
 #include <glib/gi18n.h>
 
-#if GTK_CHECK_VERSION(3, 0, 0)
 G_DEFINE_TYPE (DriveList, drive_list, GTK_TYPE_GRID);
-#else
-G_DEFINE_TYPE (DriveList, drive_list, GTK_TYPE_TABLE);
-#endif
 
 static GVolumeMonitor *volume_monitor = NULL;
 
@@ -69,7 +65,7 @@ static void add_mount          (DriveList *self,
 				GMount *mount);
 static void remove_mount       (DriveList *self,
 				GMount *mount);
-
+static void queue_relayout     (DriveList *self);
 static void
 drive_list_class_init (DriveListClass *class)
 {
@@ -84,12 +80,8 @@ drive_list_init (DriveList *self)
 {
     GList *volumes, *mounts, *tmp;
 
-#if GTK_CHECK_VERSION(3, 0, 0)
     gtk_grid_set_column_homogeneous (GTK_GRID (self), TRUE);
     gtk_grid_set_row_homogeneous (GTK_GRID (self), TRUE);
-#else
-    gtk_table_set_homogeneous (GTK_TABLE (self), TRUE);
-#endif
 
     self->volumes = g_hash_table_new (NULL, NULL);
     self->mounts = g_hash_table_new (NULL, NULL);
@@ -100,8 +92,9 @@ drive_list_init (DriveList *self)
 
     /* listen for drive connects/disconnects, and add
      * currently connected drives. */
-    if (!volume_monitor)
-	volume_monitor = g_volume_monitor_get ();
+	self->count = 0;
+	if (!volume_monitor)
+		volume_monitor = g_volume_monitor_get ();
 
     g_signal_connect_object (volume_monitor, "mount_added",
 			     G_CALLBACK (mount_added), self, 0);
@@ -115,22 +108,34 @@ drive_list_init (DriveList *self)
 			     G_CALLBACK (volume_changed), self, 0);
     g_signal_connect_object (volume_monitor, "volume_removed",
 			     G_CALLBACK (volume_removed), self, 0);
-    volumes = g_volume_monitor_get_volumes (volume_monitor);
-    for (tmp = volumes; tmp != NULL; tmp = tmp->next) {
-	GVolume *volume = tmp->data;
+	volumes = g_volume_monitor_get_volumes (volume_monitor);
+	for (tmp = volumes; tmp != NULL; tmp = tmp->next)
+	{
+			GVolume *volume = tmp->data;
+			add_volume (self, volume);
+			g_object_unref (volume);
+			self->count++;
+	}
+	g_list_free (volumes);
 
-	add_volume (self, volume);
-	g_object_unref (volume);
-    }
-    g_list_free (volumes);
+	mounts = g_volume_monitor_get_mounts (volume_monitor);
+	for (tmp = mounts; tmp != NULL; tmp = tmp->next)
+	{
+			GMount *mount = tmp->data;
+			add_mount (self, mount);
+			g_object_unref (mount);
+			self->count++;
+	}
+	self->dummy = drive_button_new (NULL);
+	gtk_button_set_relief (GTK_BUTTON (self->dummy), self->relief);
+	drive_button_set_size (DRIVE_BUTTON (self->dummy), self->icon_size);
 
-    mounts = g_volume_monitor_get_mounts (volume_monitor);
-    for (tmp = mounts; tmp != NULL; tmp = tmp->next) {
-	GMount *mount = tmp->data;
-
-	add_mount (self, mount);
-	g_object_unref (mount);
-    }
+	if (self->count == 0)
+	{
+		gtk_container_add (GTK_CONTAINER (self), self->dummy);
+		queue_relayout (self);
+		drive_button_queue_update (DRIVE_BUTTON (self->dummy));
+	}
     g_list_free (mounts);
 }
 
@@ -171,7 +176,7 @@ drive_list_dispose (GObject *object)
 					  G_CALLBACK (volume_removed), self);
 
     if (self->layout_tag)
-	g_source_remove (self->layout_tag);
+			g_source_remove (self->layout_tag);
     self->layout_tag = 0;
 
     if (G_OBJECT_CLASS (drive_list_parent_class)->dispose)
@@ -233,53 +238,56 @@ list_buttons (gpointer key, gpointer value, gpointer user_data)
 static gboolean
 relayout_buttons (gpointer data)
 {
-    DriveList *self = DRIVE_LIST (data);
-    GList *sorted_buttons = NULL, *tmp;
-    int i;
+	DriveList *self = DRIVE_LIST (data);
+	GList *sorted_buttons = NULL, *tmp;
+	int i = 0;
 
 
-    self->layout_tag = 0;
-    g_hash_table_foreach (self->volumes, list_buttons, &sorted_buttons);
-    g_hash_table_foreach (self->mounts, list_buttons, &sorted_buttons);
+	self->layout_tag = 0;
+ 	if ( self->count > 0 )
+	{
+		g_hash_table_foreach (self->volumes, list_buttons, &sorted_buttons);
+		g_hash_table_foreach (self->mounts, list_buttons, &sorted_buttons);
 
-    /* position buttons in the table according to their sorted order */
-    for (tmp = sorted_buttons, i = 0; tmp != NULL; tmp = tmp->next, i++) {
-	GtkWidget *button = tmp->data;
-    
-	if (self->orientation == GTK_ORIENTATION_HORIZONTAL) {
-	    gtk_container_child_set (GTK_CONTAINER (self), button,
-#if GTK_CHECK_VERSION(3, 0, 0)
-				     "left-attach", i + 1, "top-attach", 0,
-				     "width", 1, "height", 1,
-				     NULL);
-#else
-				     "left_attach", i, "right_attach", i+1,
-				     "top_attach", 0, "bottom_attach", 1,
-				     "x_options", GTK_FILL,
-				     "y_options", GTK_FILL,
-				     NULL);
-#endif
-	} else {
-	    gtk_container_child_set (GTK_CONTAINER (self), button,
-#if GTK_CHECK_VERSION(3, 0, 0)
-				     "left-attach", 0, "top-attach", i + 1,
-				     "width", 1, "height", 1,
-				     NULL);
-#else
-				     "left_attach", 0, "right_attach", 1,
-				     "top_attach", i, "bottom_attach", i+1,
-				     "x_options", GTK_FILL,
-				     "y_options", GTK_FILL,
-				     NULL);
-#endif
+		/* position buttons in the table according to their sorted order */
+		for (tmp = sorted_buttons, i = 0; tmp != NULL; tmp = tmp->next, i++)
+		{
+			GtkWidget *button = tmp->data;
+
+			if (self->orientation == GTK_ORIENTATION_HORIZONTAL) {
+				gtk_container_child_set (GTK_CONTAINER (self), button,
+										"left-attach", i + 1, "top-attach", 0,
+										"width", 1, "height", 1,
+										NULL);
+			}
+			else
+			{
+				gtk_container_child_set (GTK_CONTAINER (self), button,
+										"left-attach", 0, "top-attach", i + 1,
+										"width", 1, "height", 1,
+										NULL);
+			}
+		}
 	}
-    }
-#if !GTK_CHECK_VERSION(3, 0, 0)
-    /* shrink wrap the table */
-    gtk_table_resize (GTK_TABLE (self), 1, 1);
-#endif
-
-    return FALSE;
+	else
+	{
+		gtk_widget_show (self->dummy);
+		if (self->orientation == GTK_ORIENTATION_HORIZONTAL)
+		{
+			gtk_container_child_set (GTK_CONTAINER (self), self->dummy,
+									"left-attach", i + 1, "top-attach", 0,
+									"width", 1, "height", 1,
+									NULL);
+		}
+		else
+		{
+			gtk_container_child_set (GTK_CONTAINER (self), self->dummy,
+									"left-attach", 0, "top-attach", i + 1,
+									"width", 1, "height", 1,
+									NULL);
+    	}
+	}
+	return FALSE;
 }
 
 static void
@@ -296,7 +304,9 @@ mount_added (GVolumeMonitor *monitor,
 	     DriveList *self)
 {
     add_mount (self, mount);
-
+		self->count++;
+		if (self->count == 1)
+			gtk_container_remove (GTK_CONTAINER (self), g_object_ref(self->dummy));
     mount_changed (monitor, mount, self);
 }
 
@@ -325,8 +335,12 @@ mount_removed (GVolumeMonitor *monitor,
 	       DriveList *self)
 {
     remove_mount (self, mount);
-
     mount_changed (monitor, mount, self);
+		self->count--;
+		if (self->count == 0) {
+			gtk_container_add (GTK_CONTAINER (self), self->dummy);
+			queue_relayout(self);
+		}
 }
 
 static void
@@ -335,6 +349,9 @@ volume_added (GVolumeMonitor *monitor,
 	      DriveList *self)
 {
     add_volume (self, volume);
+		self->count++;
+		if (self->count == 1)
+			gtk_container_remove (GTK_CONTAINER (self), g_object_ref(self->dummy));
 }
 
 static void
@@ -355,6 +372,11 @@ volume_removed (GVolumeMonitor *monitor,
 		DriveList *self)
 {
     remove_volume (self, volume);
+		self->count--;
+		if (self->count == 0) {
+			gtk_container_add (GTK_CONTAINER (self), self->dummy);
+			queue_relayout(self);
+		}
 }
 
 static void
@@ -477,7 +499,7 @@ void
 drive_list_set_transparent (DriveList *self, gboolean transparent)
 {
     GtkReliefStyle relief;
-   
+
     relief  = transparent ? GTK_RELIEF_NONE : GTK_RELIEF_NORMAL;
 
     if (relief == self->relief)

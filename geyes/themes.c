@@ -29,11 +29,6 @@
 #define NUM_THEME_DIRECTORIES 2
 #define HIG_IDENTATION  "    "
 
-#if GTK_CHECK_VERSION (3, 0, 0)
-#define gtk_vbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_VERTICAL,Y)
-#define gtk_hbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_HORIZONTAL,Y)
-#endif
-
 static char *theme_directories[NUM_THEME_DIRECTORIES];
 
 enum {
@@ -217,10 +212,17 @@ phelp_cb (GtkDialog *dialog)
 {
 	GError *error = NULL;
 
+#if GTK_CHECK_VERSION (3, 22, 0)
+	gtk_show_uri_on_window (GTK_WINDOW (dialog),
+	                        "help:mate-geyes/geyes-settings",
+	                        gtk_get_current_event_time (),
+	                        &error);
+#else
 	gtk_show_uri (gtk_widget_get_screen (GTK_WIDGET (dialog)),
-		"help:mate-geyes/geyes-settings",
-		gtk_get_current_event_time (),
-		&error);
+	              "help:mate-geyes/geyes-settings",
+	              gtk_get_current_event_time (),
+	              &error);
+#endif
 
 	if (error) {
 		GtkWidget *error_dialog = gtk_message_dialog_new (NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
@@ -301,18 +303,18 @@ properties_cb (GtkAction  *action,
 			  G_CALLBACK (presponse_cb),
 			  eyes_applet);
 
-	vbox = gtk_vbox_new (FALSE, 0);
+	vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 	gtk_container_set_border_width (GTK_CONTAINER (vbox), 5);
 	gtk_widget_show (vbox);
 
 	gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (pbox))), vbox,
 			    TRUE, TRUE, 0);
 
-	categories_vbox = gtk_vbox_new (FALSE, 18);
+	categories_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 18);
 	gtk_box_pack_start (GTK_BOX (vbox), categories_vbox, TRUE, TRUE, 0);
 	gtk_widget_show (categories_vbox);
 
-	category_vbox = gtk_vbox_new (FALSE, 6);
+	category_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
 	gtk_box_pack_start (GTK_BOX (categories_vbox), category_vbox, TRUE, TRUE, 0);
 	gtk_widget_show (category_vbox);
 
@@ -321,14 +323,14 @@ properties_cb (GtkAction  *action,
 	gtk_label_set_use_markup (GTK_LABEL (label), TRUE);
 	gtk_label_set_justify (GTK_LABEL (label), GTK_JUSTIFY_LEFT);
 #if GTK_CHECK_VERSION (3, 16, 0)
-    gtk_label_set_xalign (GTK_LABEL (label), 0.0);
+	gtk_label_set_xalign (GTK_LABEL (label), 0.0);
 #else
 	gtk_misc_set_alignment (GTK_MISC (label), 0.0, 0.5);
 #endif
 	gtk_box_pack_start (GTK_BOX (category_vbox), label, FALSE, FALSE, 0);
 	g_free (title);
 
-	hbox = gtk_hbox_new (FALSE, 0);
+	hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_box_pack_start (GTK_BOX (category_vbox), hbox, TRUE, TRUE, 0);
 	gtk_widget_show (hbox);
 
@@ -337,13 +339,13 @@ properties_cb (GtkAction  *action,
 	gtk_box_pack_start (GTK_BOX (hbox), indent, FALSE, FALSE, 0);
 	gtk_widget_show (indent);
 
-	control_vbox = gtk_vbox_new (FALSE, 6);
+	control_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
 	gtk_box_pack_start (GTK_BOX (hbox), control_vbox, TRUE, TRUE, 0);
 	gtk_widget_show (control_vbox);
 
 	label = gtk_label_new_with_mnemonic (_("_Select a theme:"));
 #if GTK_CHECK_VERSION (3, 16, 0)
-    gtk_label_set_xalign (GTK_LABEL (label), 0.0);
+	gtk_label_set_xalign (GTK_LABEL (label), 0.0);
 #else
 	gtk_misc_set_alignment (GTK_MISC (label), 0.0, 0.5);
 #endif

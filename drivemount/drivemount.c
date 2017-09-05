@@ -79,11 +79,7 @@ static void
 change_background (MatePanelApplet               *applet,
 		   MatePanelAppletBackgroundType  type,
 		   GdkColor                  *colour,
-#if GTK_CHECK_VERSION (3, 0, 0)
 		   cairo_pattern_t           *pattern,
-#else
-		   GdkPixmap                 *pixmap,
-#endif
 		   DriveList                 *drivelist)
 {
     switch (type) {
@@ -136,10 +132,17 @@ display_help (GtkAction *action,
 
     screen = gtk_widget_get_screen (GTK_WIDGET (drive_list));
 
+#if GTK_CHECK_VERSION (3, 22, 0)
+    gtk_show_uri_on_window (NULL,
+                           "help:mate-drivemount",
+                            gtk_get_current_event_time (),
+                            &error);
+#else
     gtk_show_uri (screen,
-		"help:mate-drivemount",
-		gtk_get_current_event_time (),
-		&error);
+                  "help:mate-drivemount",
+                  gtk_get_current_event_time (),
+                  &error);
+#endif
 
     if (error) {
 	GtkWidget *dialog;

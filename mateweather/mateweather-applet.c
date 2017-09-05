@@ -41,11 +41,6 @@
 
 #define MAX_CONSECUTIVE_FAULTS (3)
 
-#if GTK_CHECK_VERSION (3, 0, 0)
-#define gtk_hbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_VERTICAL,Y)
-#define gtk_vbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_HORIZONTAL,Y)
-#endif
-
 static void about_cb (GtkAction      *action,
 		      MateWeatherApplet *gw_applet)
 {
@@ -58,10 +53,17 @@ static void help_cb (GtkAction      *action,
 {
     GError *error = NULL;
 
+#if GTK_CHECK_VERSION (3, 22, 0)
+    gtk_show_uri_on_window (NULL,
+                            "help:mateweather",
+                            gtk_get_current_event_time (),
+                            &error);
+#else
     gtk_show_uri (gtk_widget_get_screen (GTK_WIDGET (gw_applet->applet)),
-		"help:mateweather",
-		gtk_get_current_event_time (),
-		&error);
+                  "help:mateweather",
+                  gtk_get_current_event_time (),
+                  &error);
+#endif
 
     if (error) { 
 	GtkWidget *dialog = gtk_message_dialog_new (NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
@@ -152,11 +154,8 @@ static void place_widgets (MateWeatherApplet *gw_applet)
     gw_applet->image = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON); 
 
     if (icon_name != NULL) {
-#if GTK_CHECK_VERSION(3, 0, 0)
+        gtk_widget_show (gw_applet->image);
         gtk_widget_get_preferred_size (gw_applet->image, &req, NULL);
-#else
-        gtk_widget_size_request(gw_applet->image, &req);
-#endif
         if (horizontal)
             total_size += req.height;
         else
@@ -172,11 +171,8 @@ static void place_widgets (MateWeatherApplet *gw_applet)
         gtk_label_set_text(GTK_LABEL(gw_applet->label), temp);
 
     /* Check the label size to determine box layout */
-#if GTK_CHECK_VERSION(3, 0, 0)
+    gtk_widget_show (gw_applet->label);
     gtk_widget_get_preferred_size (gw_applet->label, &req, NULL);
-#else
-    gtk_widget_size_request(gw_applet->label, &req);
-#endif
     if (horizontal)
         total_size += req.height;
     else
@@ -187,13 +183,13 @@ static void place_widgets (MateWeatherApplet *gw_applet)
         gtk_widget_destroy (gw_applet->box);
     
     if (horizontal && (total_size <= panel_size))
-        gw_applet->box = gtk_vbox_new(FALSE, 0);
+        gw_applet->box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
     else if (horizontal && (total_size > panel_size))
-        gw_applet->box = gtk_hbox_new(FALSE, 2);
+        gw_applet->box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
     else if (!horizontal && (total_size <= panel_size))
-        gw_applet->box = gtk_hbox_new(FALSE, 2);
+        gw_applet->box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
     else 
-        gw_applet->box = gtk_vbox_new(FALSE, 0);
+        gw_applet->box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 
     /* Rebuild the applet it's visual area */
     gtk_container_add (GTK_CONTAINER (gw_applet->container), gw_applet->box);
@@ -462,7 +458,8 @@ update_finish (WeatherInfo *info, gpointer data)
 	    place_widgets(gw_applet);
 
 #ifdef HAVE_LIBNOTIFY
-        if (gw_applet->mateweather_pref.show_notifications)
+        if (gw_applet->mateweather_pref.show_notifications &&
+            !weather_info_equal(gw_applet->mateweather_previnfo, gw_applet->mateweather_info))
         {
 		    NotifyNotification *n;
 	            
@@ -502,6 +499,9 @@ update_finish (WeatherInfo *info, gpointer data)
 		   	 g_free (detail);
 		    }
         }
+
+        weather_info_free (gw_applet->mateweather_previnfo);
+        gw_applet->mateweather_previnfo = weather_info_clone (gw_applet->mateweather_info);
 #endif
     }
     else
@@ -553,9 +553,11 @@ void mateweather_update (MateWeatherApplet *gw_applet)
 	weather_info_update(gw_applet->mateweather_info, &prefs,
 			    update_finish, gw_applet);
     } else {
+        weather_info_abort (gw_applet->mateweather_info);
         weather_info_free(gw_applet->mateweather_info);
         gw_applet->mateweather_info = weather_info_new(gw_applet->mateweather_pref.location,
 						    &prefs,
 						    update_finish, gw_applet);
     }
+
 }

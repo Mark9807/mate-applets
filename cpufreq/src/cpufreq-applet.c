@@ -39,11 +39,6 @@
 #include "cpufreq-monitor-factory.h"
 #include "cpufreq-utils.h"
 
-#if GTK_CHECK_VERSION (3, 0, 0)
-#define gtk_vbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_VERTICAL,Y)
-#define gtk_hbox_new(X,Y) gtk_box_new(GTK_ORIENTATION_HORIZONTAL,Y)
-#endif
-
 struct _CPUFreqApplet {
         MatePanelApplet       base;
 
@@ -107,14 +102,9 @@ static gboolean cpufreq_applet_key_press         (GtkWidget          *widget,
                                                   GdkEventKey        *event);
 static void     cpufreq_applet_size_allocate     (GtkWidget          *widget,
                                                   GtkAllocation      *allocation);
-#if GTK_CHECK_VERSION (3, 0, 0)
 static void     cpufreq_applet_get_preferred_width   (GtkWidget *widget,
                                                       gint *minimum_width,
                                                       gint *natural_width);
-#else
-static void     cpufreq_applet_size_request      (GtkWidget          *widget,
-						  GtkRequisition     *requisition);
-#endif
 static void     cpufreq_applet_change_orient     (MatePanelApplet        *pa,
                                                   MatePanelAppletOrient   orient);
 static gboolean cpufreq_applet_factory           (CPUFreqApplet      *applet,
@@ -231,11 +221,7 @@ cpufreq_applet_class_init (CPUFreqAppletClass *klass)
         gobject_class->dispose = cpufreq_applet_dispose;
 
         widget_class->size_allocate = cpufreq_applet_size_allocate;
-#if GTK_CHECK_VERSION (3, 0, 0)
 	widget_class->get_preferred_width = cpufreq_applet_get_preferred_width;
-#else
-	widget_class->size_request = cpufreq_applet_size_request;
-#endif
         widget_class->button_press_event = cpufreq_applet_button_press;
         widget_class->key_press_event = cpufreq_applet_key_press;
 
@@ -317,11 +303,7 @@ cpufreq_applet_get_max_label_width (CPUFreqApplet *applet)
 	available_freqs = cpufreq_monitor_get_available_frequencies (applet->monitor);
 	while (available_freqs) {
 		GtkWidget     *label;
-#if GTK_CHECK_VERSION (3, 0, 0)
 		gint           label_width;
-#else
-		GtkRequisition req;
-#endif
 		const gchar   *text;
 		gchar         *freq_text;
 		gint           freq;
@@ -331,14 +313,8 @@ cpufreq_applet_get_max_label_width (CPUFreqApplet *applet)
 
 		freq_text = cpufreq_utils_get_frequency_label (freq);
 		label = gtk_label_new (freq_text);
-#if GTK_CHECK_VERSION (3, 0, 0)
 		gtk_widget_get_preferred_width (applet->label, &label_width, NULL);
 		width = MAX (width, label_width); 
-#endif
-#if !GTK_CHECK_VERSION (3, 0, 0)
-		gtk_widget_size_request (label, &req);
-		width = MAX (width, req.width);
-#endif
 
 		g_free (freq_text);
 		gtk_widget_destroy (label);
@@ -355,23 +331,14 @@ static gint
 cpufreq_applet_get_max_perc_width (CPUFreqApplet *applet)
 {
 	GtkWidget      *label;
-#if GTK_CHECK_VERSION (3, 0, 0)
 	gint            width;
-#else
-	GtkRequisition  req;
-#endif
 
 	if (applet->max_perc_width > 0)
 		return applet->max_perc_width;
 
 	label = gtk_label_new ("100%");
-#if GTK_CHECK_VERSION (3, 0, 0)
 	gtk_widget_get_preferred_width (applet->label, &width,&width);
 	applet->max_perc_width = width +20; /*for some reason width always comes up 2 characters*/
-#else
-	gtk_widget_size_request (label, &req);
-	applet->max_perc_width = req.width;
-#endif
 	gtk_widget_destroy (label);
 
 	return applet->max_perc_width;
@@ -381,55 +348,30 @@ static gint
 cpufreq_applet_get_max_unit_width (CPUFreqApplet *applet)
 {
 	GtkWidget     *label;
-#if !GTK_CHECK_VERSION (3, 0, 0)
-	GtkRequisition req;
-#endif
 	gint           w1, w2;
 
 	if (applet->max_unit_width > 0)
 		return applet->max_unit_width;
 
 	label = gtk_label_new ("GHz");
-#if GTK_CHECK_VERSION (3, 0, 0)
 	gtk_widget_get_preferred_width (applet->label, &w1, NULL);
-#else
-	gtk_widget_size_request (label, &req);
-	w1 = req.width;
-#endif
 
 	gtk_label_set_text (GTK_LABEL (label), "MHz");
-#if GTK_CHECK_VERSION (3, 0, 0)
 	gtk_widget_get_preferred_width (applet->label, &w2, NULL);
-#else
-	gtk_widget_size_request (label, &req);
-	w2 = req.width;
-#endif
 
 	gtk_widget_destroy (label);
-#if GTK_CHECK_VERSION (3, 0, 0)
 	applet->max_unit_width = MAX (w1, w2)-1;
-#else
-	applet->max_unit_width = MAX (w1, w2);
-#endif
 	return applet->max_unit_width;
 }
 
 static void
-#if GTK_CHECK_VERSION (3, 0, 0)
 cpufreq_applet_get_preferred_width (GtkWidget *widget, gint *minimum_width, gint *natural_width)
-#else
-cpufreq_applet_size_request (GtkWidget *widget, GtkRequisition *requisition)
-#endif
 {
 	CPUFreqApplet *applet;
 	gint           labels_width = 0;
 	gint           width;
 
 	applet = CPUFREQ_APPLET (widget);
-
-#if !GTK_CHECK_VERSION (3, 0, 0)
-	GTK_WIDGET_CLASS (cpufreq_applet_parent_class)->size_request (widget, requisition);
-#endif
 
 	if (applet->orient == MATE_PANEL_APPLET_ORIENT_LEFT ||
 	    applet->orient == MATE_PANEL_APPLET_ORIENT_RIGHT)
@@ -449,30 +391,15 @@ cpufreq_applet_size_request (GtkWidget *widget, GtkRequisition *requisition)
 	}
 
 	if (applet->show_icon) {
-#if GTK_CHECK_VERSION (3, 0, 0)
 		gint icon_width;
 
 		gtk_widget_get_preferred_width (applet->icon, &icon_width, NULL);
-		width = gtk_orientable_get_orientation (GTK_ORIENTABLE (applet->box)) == GTK_ORIENTATION_HORIZONTAL ?
-			labels_width + icon_width + 2 :
-			MAX (labels_width, icon_width + 2);
-#else
-		GtkRequisition req;
-
-		gtk_widget_size_request (applet->icon, &req);
-		width = GTK_IS_HBOX (applet->box) ?
-			labels_width + req.width + 2 :
-			MAX (labels_width, req.width + 2);
-#endif
+		width = (labels_width + icon_width + 2);
 	} else {
 		width = labels_width;
 	}
 
-#if GTK_CHECK_VERSION (3, 0, 0)
 	*minimum_width = *natural_width = width;
-#else
-	requisition->width = width;
-#endif
 }
 
 static void
@@ -487,18 +414,19 @@ cpufreq_applet_popup_position_menu (GtkMenu  *menu,
         GtkAllocation   allocation;
         gint            menu_xpos;
         gint            menu_ypos;
+        gint            sc_width;
+        gint            sc_height;
 
         widget = GTK_WIDGET (gdata);
 
-#if GTK_CHECK_VERSION (3, 0, 0)
         gtk_widget_get_preferred_size (GTK_WIDGET (menu), &requisition, NULL);
-#else
-        gtk_widget_size_request (GTK_WIDGET (menu), &requisition);
-#endif
 
         gdk_window_get_origin (gtk_widget_get_window (widget), &menu_xpos, &menu_ypos);
 
-	gtk_widget_get_allocation (widget, &allocation);
+        gtk_widget_get_allocation (widget, &allocation);
+
+        gdk_window_get_geometry (gdk_screen_get_root_window (gtk_widget_get_screen (widget)), NULL, NULL,
+                                 &sc_width, &sc_height);
 
         menu_xpos += allocation.x;
         menu_ypos += allocation.y;
@@ -506,14 +434,14 @@ cpufreq_applet_popup_position_menu (GtkMenu  *menu,
         switch (mate_panel_applet_get_orient (MATE_PANEL_APPLET (widget))) {
         case MATE_PANEL_APPLET_ORIENT_DOWN:
         case MATE_PANEL_APPLET_ORIENT_UP:
-                if (menu_ypos > gdk_screen_get_height (gtk_widget_get_screen (widget)) / 2)
+                if (menu_ypos > sc_height / 2)
                         menu_ypos -= requisition.height;
                 else
                         menu_ypos += allocation.height;
                 break;
         case MATE_PANEL_APPLET_ORIENT_RIGHT:
         case MATE_PANEL_APPLET_ORIENT_LEFT:
-                if (menu_xpos > gdk_screen_get_width (gtk_widget_get_screen (widget)) / 2)
+                if (menu_xpos > sc_width / 2)
                         menu_xpos -= requisition.width;
                 else
                         menu_xpos += allocation.width;
@@ -524,11 +452,7 @@ cpufreq_applet_popup_position_menu (GtkMenu  *menu,
 
         *x = menu_xpos;
         *y = menu_ypos;
-#if GTK_CHECK_VERSION (3, 0, 0)
-        if (push_in) *push_in = FALSE;  /*fix botttom panel menu rendering in gtk3*/
-#else
-        *push_in = TRUE;
-#endif
+        if (push_in) *push_in = FALSE;  /*fix bottom panel menu rendering in gtk3*/
 }
 
 static void
@@ -551,7 +475,6 @@ cpufreq_applet_menu_popup (CPUFreqApplet *applet,
         if (!menu)
                 return;
                 
-#if GTK_CHECK_VERSION (3, 0, 0)
         /*Set up theme and transparency support*/
         GtkWidget *toplevel = gtk_widget_get_toplevel (menu);
         /* Fix any failures of compiz/other wm's to communicate with gtk for transparency */
@@ -563,7 +486,7 @@ cpufreq_applet_menu_popup (CPUFreqApplet *applet,
         context = gtk_widget_get_style_context (GTK_WIDGET(toplevel));
         gtk_style_context_add_class(context,"gnome-panel-menu-bar");
         gtk_style_context_add_class(context,"mate-panel-menu-bar");
-#endif
+
         gtk_menu_popup (GTK_MENU (menu), NULL, NULL,
                         cpufreq_applet_popup_position_menu,
                         (gpointer) applet,
@@ -659,10 +582,17 @@ cpufreq_applet_help_cb (GtkAction     *action,
 {
         GError *error = NULL;
 
+#if GTK_CHECK_VERSION (3, 22, 0)
+	gtk_show_uri_on_window (NULL,
+	                        "help:mate-cpufreq-applet",
+	                        gtk_get_current_event_time (),
+	                        &error);
+#else
 	gtk_show_uri (gtk_widget_get_screen (GTK_WIDGET (applet)),
-			"help:mate-cpufreq-applet",
-			gtk_get_current_event_time (),
-			&error);
+	              "help:mate-cpufreq-applet",
+	              gtk_get_current_event_time (),
+	              &error);
+#endif
 
         if (error) {
                 cpufreq_utils_display_error (_("Could not open help document"),
@@ -910,11 +840,7 @@ cpufreq_applet_get_widget_size (CPUFreqApplet *applet,
         if (!gtk_widget_get_visible (widget))
                 return 0;
 
-#if GTK_CHECK_VERSION (3, 0, 0)
         gtk_widget_get_preferred_size (widget, &req, NULL);
-#else
-        gtk_widget_size_request (widget, &req);
-#endif
 
         switch (applet->orient) {
         case MATE_PANEL_APPLET_ORIENT_LEFT:
@@ -977,7 +903,6 @@ cpufreq_applet_refresh (CPUFreqApplet *applet)
         }
 
 	if (horizontal) {
-#if GTK_CHECK_VERSION (3, 0, 0)
 		applet->labels_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
 		if ((label_size + pixmap_size) <= panel_size)
 			applet->box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
@@ -993,23 +918,6 @@ cpufreq_applet_refresh (CPUFreqApplet *applet)
                 } else {
                         applet->box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
                         applet->labels_box  = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-#else
-		applet->labels_box = gtk_hbox_new (FALSE, 2);
-		if ((label_size + pixmap_size) <= panel_size)
-			applet->box = gtk_vbox_new (FALSE, 2);
-		else
-			applet->box = gtk_hbox_new (FALSE, 2);
-	} else {
-                if (total_size <= panel_size) {
-                        applet->box = gtk_hbox_new (FALSE, 2);
-                        applet->labels_box  = gtk_hbox_new (FALSE, 2);
-                } else if ((label_size + unit_label_size) <= (panel_size - size_step)) {
-                        applet->box = gtk_vbox_new (FALSE, 2);
-                        applet->labels_box  = gtk_hbox_new (FALSE, 2);
-                } else {
-                        applet->box = gtk_vbox_new (FALSE, 2);
-                        applet->labels_box  = gtk_vbox_new (FALSE, 2);
-#endif
                 }
 	}
 
