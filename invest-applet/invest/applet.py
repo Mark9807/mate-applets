@@ -48,7 +48,23 @@ class InvestApplet(MatePanelApplet.Applet):
 	def new_ilw(self):
 		self.quotes_updater = QuoteUpdater(self.set_applet_icon,
 						   self.set_applet_tooltip)
-		self.investwidget = InvestWidget(self.quotes_updater)
+                self.investwidget = Gtk.ScrolledWindow()
+                self.investwidget.set_policy(Gtk.PolicyType.NEVER,
+                                             Gtk.PolicyType.AUTOMATIC)
+                #this helps get the initial height right
+                self.investwidget.set_propagate_natural_height(True)
+                raw_invest_widget = InvestWidget(self.quotes_updater)
+
+                #the window containing the list of quotes can't be
+                #resized by the user so show all quotes possible up to a
+                #maximum window size
+		window = self.applet.get_window()
+		screen = window.get_screen()
+                monitor = screen.get_monitor_geometry(
+                        screen.get_monitor_at_window (window))
+                self.investwidget.set_max_content_height(monitor.height-60)
+                
+                self.investwidget.add(raw_invest_widget)
 		self.ilw = InvestmentsListWindow(self.applet, self.investwidget)
 
 	def reload_ilw(self):
@@ -110,7 +126,7 @@ class InvestmentsListWindow(Gtk.Window):
 		self.alignment = self.applet.get_orient ()
 		
 		self.add(list)
-		list.show()
+		list.show_all()
 
 		# boolean variable that identifies if the window is visible
 		# show/hide is triggered by left-clicking on the applet
@@ -118,8 +134,16 @@ class InvestmentsListWindow(Gtk.Window):
 
 	def toggle_show(self):
 		if self.hidden == True:
-			self.update_position()
+                        #we have the problem that the width and height are not
+                        #correctly known until the window has finished being
+                        #shown (which is done asynchrously). So start by
+                        #showing window.
 			self.show_all()
+                        #then get the window vaguely in the right place
+			self.update_position()
+                        #and finally, once the window dimensions are fully known,
+                        #move it to the right place
+                        GObject.idle_add(self.update_position)
 			self.hidden = False
 		elif self.hidden == False:
 			self.hide()
@@ -136,6 +160,7 @@ class InvestmentsListWindow(Gtk.Window):
 
 		window = self.applet.get_window()
 		screen = window.get_screen()
+                self.set_screen(screen) #in case of multiple screens
                 monitor = screen.get_monitor_geometry (screen.get_monitor_at_window (window))
                 (ret, ax, ay) = window.get_origin()
                 (ignored, ignored, aw, ah) = window.get_geometry()
@@ -195,5 +220,5 @@ class InvestmentsListWindow(Gtk.Window):
 
 			gravity = Gdk.Gravity.SOUTH_WEST
 
-		self.move(x, y)
 		self.set_gravity(gravity)
+		self.move(x, y)

@@ -60,8 +60,13 @@ class ImageRetriever(Thread, _IdleObject):
 			loader.connect("closed", lambda loader: self.image.set_from_pixbuf(loader.get_pixbuf()))
 			loader.write(sock.read())
 			sock.close()
-			loader.close()
-			self.retrieved = True
+                        try:
+			        loader.close()
+		        except Exception, msg:
+			        mate_invest.debug("Error handling %s: %s" %
+                                                  (self.image_url, msg))
+                        else:
+			        self.retrieved = True
 		self.emit("completed")
 
 # p:
