@@ -57,12 +57,12 @@ class InvestApplet(MatePanelApplet.Applet):
 
                 #the window containing the list of quotes can't be
                 #resized by the user so show all quotes possible up to a
-                #maximum window size
+                #nice maximum window size
 		window = self.applet.get_window()
-		screen = window.get_screen()
-                monitor = screen.get_monitor_geometry(
-                        screen.get_monitor_at_window (window))
-                self.investwidget.set_max_content_height(monitor.height-60)
+                display = window.get_display()
+                monitor = display.get_monitor_at_window(window)
+                monitor_geom = monitor.get_geometry()
+                self.investwidget.set_max_content_height(monitor_geom.height-60)
                 
                 self.investwidget.add(raw_invest_widget)
 		self.ilw = InvestmentsListWindow(self.applet, self.investwidget)
@@ -161,7 +161,8 @@ class InvestmentsListWindow(Gtk.Window):
 		window = self.applet.get_window()
 		screen = window.get_screen()
                 self.set_screen(screen) #in case of multiple screens
-                monitor = screen.get_monitor_geometry (screen.get_monitor_at_window (window))
+                display = window.get_display()
+                monitor = display.get_monitor_at_window(window).get_geometry()
                 (ret, ax, ay) = window.get_origin()
                 (ignored, ignored, aw, ah) = window.get_geometry()
 
